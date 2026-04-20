@@ -6,665 +6,791 @@
 //            daftar matkul, riwayat nilai, catatan akademik, dan asisten target IPK.
 // ═══════════════════════════════════════════════════════════════════════════
 
-// ─── STEP 1: IMPORT ───────────────────────────────────────────────────────────
-// import { useEffect, useState, useMemo } dari 'react'
-// import { useParams, Link } dari 'react-router-dom'
-// import {
-//   ArrowLeft, RefreshCw, AlertCircle, TrendingUp, TrendingDown,
-//   Minus, Target, MessageSquare, Calendar, Award, Info,
-//   CheckSquare, BookOpen, ChevronDown, ChevronUp,
-//   History, User, GraduationCap, ListChecks, X, RotateCcw
-// } dari 'lucide-react'
-// import {
-//   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-//   ResponsiveContainer, Legend, ReferenceLine
-// } dari 'recharts'
-// import { getPredict } dari '../api/client'
-// import LoadingSpinner dari '../components/LoadingSpinner'
-// import IPKTargetAssistant dari '../components/IPKTargetAssistant'
+import { useEffect, useState, useMemo } from 'react'
+import { useParams, Link } from 'react-router-dom'
+import {
+  ArrowLeft, RefreshCw, AlertCircle, TrendingUp, TrendingDown,
+  Minus, Target, MessageSquare, Calendar, Award, Info,
+  CheckSquare, BookOpen, ChevronDown, ChevronUp,
+  History, User, GraduationCap, ListChecks, X, RotateCcw
+} from 'lucide-react'
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Legend, ReferenceLine
+} from 'recharts'
+import { getPredict } from '../api/client'
+import LoadingSpinner from '../components/LoadingSpinner'
+import IPKTargetAssistant from '../components/IPKTargetAssistant'
+import StudentCard from '../components/StudentCard'
+import GradeHistoryTable from '../components/GradeHistoryTable'
+import IPKChart from '../components/IPKChart'
 
-// ─── STEP 2: KONSTANTA ────────────────────────────────────────────────────────
-// PRODI_COLORS: gradient per prodi (sama seperti di komponen lain)
-// {
-//   TI: 'from-indigo-500 to-blue-600',
-//   AK: 'from-emerald-500 to-teal-600',
-//   TM: 'from-orange-500 to-red-600',
-//   AP: 'from-violet-500 to-purple-600',
-// }
-//
-// GRADE_BADGE: class badge per nilai huruf (bg + text + border, support dark mode)
-// {
-//   A:  'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700',
-//   AB: 'bg-teal-100 ...',
-//   B:  'bg-blue-100 ...',
-//   BC: 'bg-yellow-100 ...',
-//   C:  'bg-orange-100 ...',
-//   D:  'bg-red-100 ...',
-//   E:  'bg-gray-100 ...',
-// }
-//
-// SKS_CONFIG: konfigurasi tampilan per jumlah SKS (24, 23, 22, 21)
-// Setiap key berisi: { color, bg, border, text, label }
-// 24: emerald, label 'Beban Penuh'
-// 23: blue/indigo, label 'Beban Tinggi'
-// 22: yellow/amber, label 'Beban Normal'
-// 21: orange/red, label 'Beban Ringan'
+// ─── KONSTANTA ────────────────────────────────────────────────────────
+const PRODI_COLORS = {
+  TI: 'from-indigo-500 to-blue-600',
+  AK: 'from-emerald-500 to-teal-600',
+  TM: 'from-orange-500 to-red-600',
+  AP: 'from-violet-500 to-purple-600',
+}
 
-// ─── STEP 3: HELPER FUNCTIONS ─────────────────────────────────────────────────
-// function getIPKColor(ipk): return Tailwind text color class berdasarkan IPK
-//   >= 3.5 → 'text-emerald-600 dark:text-emerald-400'
-//   >= 3.0 → 'text-blue-600 dark:text-blue-400'
-//   >= 2.5 → 'text-yellow-600 dark:text-yellow-400'
-//   else   → 'text-red-600 dark:text-red-400'
-//
-// function getIPKBg(ipk): return Tailwind bg color class berdasarkan IPK
-//   >= 3.5 → 'bg-emerald-500'
-//   >= 3.0 → 'bg-blue-500'
-//   >= 2.5 → 'bg-yellow-500'
-//   else   → 'bg-red-500'
-//
-// function getInitials(nama): return 2 huruf kapital dari 2 kata pertama nama
-//   nama.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
+const GRADE_BADGE = {
+  A:  'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700',
+  AB: 'bg-teal-100 dark:bg-teal-900/40 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-700',
+  B:  'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-700',
+  BC: 'bg-sky-100 dark:bg-sky-900/40 text-sky-800 dark:text-sky-300 border border-sky-200 dark:border-sky-700',
+  C:  'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-700',
+  D:  'bg-orange-100 dark:bg-orange-900/40 text-orange-800 dark:text-orange-300 border border-orange-200 dark:border-orange-700',
+  E:  'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-700',
+}
 
-// ─── STEP 4: COMPONENT StudentProfileCard ─────────────────────────────────────
-// Props: { student, prediksi }
-//
-// - const ipk = student.ipk_kumulatif
-// - const trend = prediksi?.trend || 'stabil'
-// - Buat trendConfig object dengan 3 key (meningkat, menurun, stabil):
-//   Setiap key: { icon: TrendingUp/TrendingDown/Minus, label: string, cls: string }
-//   cls adalah class badge (bg + text + border, support dark mode)
-// - const tc = trendConfig[trend] || trendConfig.stabil
-// - const TrendIcon = tc.icon
-// - const prodi_color = PRODI_COLORS[student.prodi_key] || 'from-indigo-500 to-purple-600'
-//
-// Return JSX: <div class="card animate-slide-up">
-//   flex flex-col sm:flex-row items-start sm:items-center gap-4
-//
-//   [1] Avatar (w-14 h-14 sm:w-16 sm:h-16 rounded-2xl, gradient bg, shadow-lg, flex-shrink-0):
-//       class: `bg-gradient-to-br ${prodi_color}`
-//       Isi: <span class="text-white font-extrabold text-lg sm:text-xl">{getInitials(student.nama)}</span>
-//
-//   [2] Info (flex-1 min-w-0):
-//       - Baris nama + badge prodi: flex flex-wrap items-center gap-2 mb-1
-//         * <h2> nama: text-lg sm:text-xl font-extrabold text-gray-900 dark:text-white truncate
-//         * Badge prodi_key: px-2.5 py-0.5 rounded-full text-xs font-bold
-//           bg-gradient-to-r ${prodi_color} text-white flex-shrink-0
-//       - Info row (flex flex-wrap items-center gap-x-3 gap-y-1 text-xs sm:text-sm text-gray-500):
-//         * NIM dengan icon GraduationCap (font-mono font-semibold text-gray-700)
-//         * Jenis kelamin dengan icon User ('L' → 'Laki-laki', 'P' → 'Perempuan', else '-')
-//         * Nama prodi (hidden sm:inline)
-//         * Angkatan
-//       - Semester aktif: mt-1 flex items-center gap-2 text-xs sm:text-sm
-//         * Label "Semester Aktif:" (text-gray-500)
-//         * Nilai: font-bold text-gray-800 dark:text-gray-200
-//
-//   [3] Trend badge (flex-shrink-0):
-//       <div class={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs sm:text-sm font-semibold ${tc.cls}`}>
-//         <TrendIcon class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-//         {tc.label}
-//       </div>
-//
-//   [4] IPK progress bar (mt-4 pt-4 border-t border-gray-100 dark:border-gray-700):
-//       - Header row: flex items-center justify-between mb-2
-//         * "IPK Kumulatif" (text-sm font-semibold text-gray-700 dark:text-gray-300)
-//         * Nilai IPK: text-lg font-extrabold tabular-nums ${getIPKColor(ipk)}
-//           Isi: {ipk.toFixed(2)} / 4.00
-//       - Track bar: w-full bg-gray-100 dark:bg-gray-700 rounded-full h-3 overflow-hidden
-//         Fill: h-full rounded-full ${getIPKBg(ipk)} transition-all duration-700
-//               style={{ width: `${(ipk / 4.0) * 100}%` }}
-//       - Scale labels: flex justify-between mt-1 text-xs text-gray-400
-//         5 label: 0.00, 2.00, 3.00, 3.50, 4.00
+const SKS_CONFIG = {
+  24: { color: 'from-emerald-500 to-green-600', bg: 'bg-emerald-50 dark:bg-emerald-900/10', border: 'border-emerald-200 dark:border-emerald-800', text: 'text-emerald-700', label: 'Beban Penuh' },
+  23: { color: 'from-indigo-500 to-blue-600', bg: 'bg-indigo-50 dark:bg-indigo-900/10', border: 'border-indigo-200 dark:border-indigo-800', text: 'text-indigo-700', label: 'Beban Tinggi' },
+  22: { color: 'from-yellow-500 to-amber-600', bg: 'bg-yellow-50 dark:bg-yellow-900/10', border: 'border-yellow-200 dark:border-yellow-800', text: 'text-yellow-700', label: 'Beban Normal' },
+  21: { color: 'from-orange-500 to-red-600', bg: 'bg-orange-50 dark:bg-orange-900/10', border: 'border-orange-200 dark:border-orange-800', text: 'text-orange-700', label: 'Beban Ringan' },
+}
 
-// ─── STEP 5: COMPONENT PredictionSummaryCards ─────────────────────────────────
-// Props: { prediksi, currentIPK, selectedScenario }
-//
-// - const st = prediksi.semester_target
-// - Ambil nilai dari selectedScenario jika ada, fallback ke prediksi:
-//   const ips = selectedScenario ? selectedScenario.prediksi_ips : prediksi.prediksi_ips
-//   const ipk = selectedScenario ? selectedScenario.prediksi_ipk : prediksi.prediksi_ipk_baru
-//   const recSks = selectedScenario ? selectedScenario.sks : prediksi.rekomendasi_sks
-// - const conf = prediksi.confidence
-// - const sksCfg = SKS_CONFIG[recSks] || SKS_CONFIG[22]
-//
-// Return JSX: grid grid-cols-1 sm:grid-cols-2 gap-4
-//
-//   [Card A] Prediksi IPS: <div class="card animate-slide-up">
-//     - Label: "Prediksi Semester {st} (Sedang Berjalan)" (text-xs uppercase tracking-wide)
-//     - Angka IPS besar: text-5xl font-extrabold tabular-nums ${getIPKColor(ips)}
-//       Isi: {ips.toFixed(2)}
-//     - "IPS" label kecil di samping
-//     - Row "Prediksi IPK Baru": flex justify-between text-sm
-//     - Row "Keyakinan": flex justify-between text-sm
-//     - Badge semester: px-2.5 py-1 rounded-full bg-indigo-50 border border-indigo-200
-//       inline-flex items-center gap-1
-//       Isi: <Target class="w-3.5 h-3.5 text-indigo-500" /> + "Semester {st}"
-//
-//   [Card B] Rekomendasi SKS: <div class={`card animate-slide-up ${sksCfg.bg} border ${sksCfg.border}`}>
-//     - Label: "Rekomendasi SKS" (text-xs uppercase tracking-wide)
-//     - Angka SKS besar: text-5xl font-extrabold tabular-nums
-//       bg-gradient-to-r ${sksCfg.color} bg-clip-text text-transparent
-//       Isi: {recSks}
-//     - "SKS" label kecil di samping
-//     - Badge label SKS: px-2 py-0.5 rounded-full text-xs font-bold ${sksCfg.text} ${sksCfg.bg}
-//     - Progress bar SKS: w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2
-//       Fill: bg-gradient-to-r ${sksCfg.color}
-//             style={{ width: `${(recSks / 24) * 100}%` }}
-//     - Label: "{recSks} / 24 SKS maksimum" (text-xs text-gray-400 mt-1)
+// ─── HELPER FUNCTIONS ─────────────────────────────────────────────────
+function getIPKColor(ipk) {
+  if (ipk >= 3.5) return 'text-emerald-600 dark:text-emerald-400'
+  if (ipk >= 3.0) return 'text-blue-600 dark:text-blue-400'
+  if (ipk >= 2.5) return 'text-yellow-600 dark:text-yellow-400'
+  return 'text-red-600 dark:text-red-400'
+}
 
-// ─── STEP 6: COMPONENT ChartTooltip (untuk TrendChart) ────────────────────────
-// const ChartTooltip = ({ active, payload, label }) => {
-//   Guard: if (!active || !payload || !payload.length) return null
-//   const isPred = label?.toString().includes('Prediksi')
-//   Return JSX tooltip box (bg-white dark:bg-gray-800, border, rounded-xl, shadow-xl, p-3):
-//     - <p> label: text-xs font-semibold text-gray-500 mb-1
-//     - Map payload → <p key={i} style={{ color: p.color }} class="text-sm font-bold">
-//         {p.name}: <span class="tabular-nums">{Number(p.value).toFixed(2)}</span>
-//       </p>
-//     - Jika isPred: <p class="text-xs text-amber-500 mt-1 italic">* Nilai prediksi</p>
-// }
+function getIPKBg(ipk) {
+  if (ipk >= 3.5) return 'bg-emerald-500'
+  if (ipk >= 3.0) return 'bg-blue-500'
+  if (ipk >= 2.5) return 'bg-yellow-500'
+  return 'bg-red-500'
+}
 
-// ─── STEP 7: COMPONENT TrendChart ─────────────────────────────────────────────
-// Props: { riwayat, prediksiIPS, prediksiIPK, semesterTarget, selectedScenario }
-//
-// - Ambil nilai display dari selectedScenario jika ada:
-//   const displayIPS = selectedScenario ? selectedScenario.prediksi_ips : prediksiIPS
-//   const displayIPK = selectedScenario ? selectedScenario.prediksi_ipk : prediksiIPK
-//
-// - Build data array (sama seperti IPKChart.jsx):
-//   const data = []
-//   let cumSks = 0, cumPoints = 0
-//   riwayat.forEach(sem => {
-//     cumSks += sem.sks; cumPoints += sem.ips * sem.sks
-//     data.push({ name: `Semester ${sem.semester}`, IPS: sem.ips, IPK: parseFloat((cumPoints/cumSks).toFixed(2)) })
-//   })
-//   data.push({ name: `Sem ${semesterTarget} (Prediksi)`, IPS: displayIPS, IPK: displayIPK, isPredicted: true })
-//
-// - Hitung trend dari 2 semester terakhir:
-//   const trend = riwayat.length >= 2
-//     ? riwayat[riwayat.length - 1].ips - riwayat[riwayat.length - 2].ips : 0
-//   Tentukan TrendIcon, trendColor, trendLabel berdasarkan threshold 0.05
-//
-// Return JSX: <div class="card animate-slide-up">
-//   [1] Header: flex items-center justify-between mb-4
-//       Kiri: h3 "Tren Performa Akademik" + p "IPS & IPK per semester"
-//       Kanan: badge trend (flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-50)
-//
-//   [2] Chart: <div class="h-64">
-//       <ResponsiveContainer width="100%" height="100%">
-//         <AreaChart data={data} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
-//           <defs>
-//             Gradient "ipsGrad": indigo #6366f1, opacity 0.3 → 0
-//             Gradient "ipkGrad": purple #a855f7, opacity 0.3 → 0
-//           </defs>
-//           <CartesianGrid strokeDasharray="3 3" stroke="currentColor" class="text-gray-100 dark:text-gray-700/50" />
-//           <XAxis dataKey="name" tick={{ fontSize: 11 }} tickLine=false axisLine=false />
-//           <YAxis domain={[0, 4]} ticks={[0,1,2,3,4]} tick={{ fontSize: 11 }} tickLine=false axisLine=false />
-//           <Tooltip content={<ChartTooltip />} />
-//           <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '8px' }} />
-//           <ReferenceLine x={`Sem ${semesterTarget} (Prediksi)`} stroke="#f59e0b"
-//             strokeDasharray="4 4" strokeWidth={1.5}
-//             label={{ value: 'Prediksi', position: 'top', fontSize: 10, fill: '#f59e0b' }} />
-//           <Area type="monotone" dataKey="IPS" stroke="#6366f1" strokeWidth={2.5}
-//             fill="url(#ipsGrad)" dot={{ fill: '#6366f1', strokeWidth: 2, r: 4 }}
-//             activeDot={{ r: 6, strokeWidth: 0 }} />
-//           <Area type="monotone" dataKey="IPK" stroke="#a855f7" strokeWidth={2.5}
-//             fill="url(#ipkGrad)" dot={{ fill: '#a855f7', strokeWidth: 2, r: 4 }}
-//             activeDot={{ r: 6, strokeWidth: 0 }} />
-//         </AreaChart>
-//       </ResponsiveContainer>
-//
-//   [3] Legend manual (flex items-center gap-4 mt-3 pt-3 border-t):
-//       - Dot indigo + "IPS per semester"
-//       - Dot purple + "IPK kumulatif"
-//       - Dashed amber + "Nilai prediksi" (ml-auto)
+// ─── COMPONENTS ───────────────────────────────────────────────────────
 
-// ─── STEP 8: COMPONENT MatkulListModal ────────────────────────────────────────
-// Props: { scenario, onClose }
-// Guard: if (!scenario) return null
-//
-// - const cfg = SKS_CONFIG[scenario.sks] || SKS_CONFIG[22]
-//
-// Return JSX: modal overlay (fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm)
-//   onClick={onClose} → klik backdrop tutup modal
-//
-//   Modal box (bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col)
-//   onClick={e => e.stopPropagation()} → cegah bubble ke backdrop
-//
-//   [1] Header (flex items-center justify-between px-5 py-4 border-b):
-//       Kiri: icon BookOpen (gradient cfg.color) + judul "Daftar Matakuliah" + label SKS
-//       Kanan: tombol X (p-1.5 rounded-lg hover:bg-gray-100)
-//
-//   [2] Stats row (px-4 py-3 bg-gray-50 border-b grid grid-cols-3 gap-3 text-center):
-//       3 stat: Total SKS, Prediksi IPS, IPK Baru
-//       Masing-masing: label text-xs text-gray-400 + nilai font-extrabold tabular-nums
-//
-//   [3] Daftar matkul (flex-1 overflow-y-auto px-4 py-3 space-y-1.5):
-//       Map scenario.matkul → <div key={mk.kode} class="flex items-center gap-3 p-2.5 rounded-xl bg-gray-50 border">
-//         Kiri (flex-1 min-w-0):
-//           <p> nama matkul: text-sm font-medium truncate
-//           <p> kode + wajib/pilihan: text-xs text-gray-400
-//         Kanan (text-right flex-shrink-0):
-//           <p> SKS: text-xs font-bold text-gray-600
-//           Jika mk.prediksi_nilai_huruf: badge nilai huruf (GRADE_BADGE)
-//
-//   [4] Footer (px-5 py-3 border-t):
-//       Tombol "Tutup" (w-full py-2 rounded-xl text-sm font-semibold bg-gray-100)
+function PredictionSummaryCards({ prediksi, currentIPK, selectedScenario }) {
+  const st = prediksi.semester_target
+  const ips = selectedScenario ? selectedScenario.prediksi_ips : prediksi.prediksi_ips
+  const ipk = selectedScenario ? selectedScenario.prediksi_ipk : prediksi.prediksi_ipk_baru
+  const recSks = selectedScenario ? selectedScenario.sks : prediksi.rekomendasi_sks
+  const sksCfg = SKS_CONFIG[recSks] || SKS_CONFIG[22]
 
-// ─── STEP 9: COMPONENT SKSScenarios ───────────────────────────────────────────
-// Props: { scenarios, rekomendasi_sks, selectedSks, onSelectSks, onOpenPilihMatkul, isCustom, onReset }
-//
-// - const [modalScenario, setModalScenario] = useState(null)
-//   → state untuk modal daftar matkul per scenario
-//
-// Return JSX: <div class="card animate-slide-up">
-//
-//   [1] Header: flex flex-wrap items-start justify-between gap-3 mb-5
-//       Kiri: icon Award + judul "Simulasi SKS — Jika Anda Mengambil..." + deskripsi
-//       Kanan: tombol-tombol
-//         - Jika isCustom: tombol "Reset" (onClick={onReset}, icon RotateCcw)
-//         - Tombol "Pilih Matakuliah" (onClick={onOpenPilihMatkul}, icon ListChecks, gradient indigo-purple)
-//
-//   [2] Jika isCustom: info banner (bg-indigo-50 border-indigo-200 rounded-xl px-3 py-2)
-//       Isi: <CheckSquare /> + teks "Menggunakan pilihan matakuliah kustom. Klik Reset..."
-//
-//   [3] Grid 4 kartu scenario: grid grid-cols-2 lg:grid-cols-4 gap-3
-//       Map scenarios → render kartu:
-//       - const cfg = SKS_CONFIG[sc.sks] || SKS_CONFIG[22]
-//       - const isRec = sc.sks === rekomendasi_sks
-//       - const isSelected = !isCustom && sc.sks === selectedSks
-//
-//       <button key={sc.sks} onClick={() => onSelectSks(sc.sks)}
-//               class kondisional:
-//               - isSelected: `${cfg.bg} ${cfg.border} ring-2 ring-offset-2 ring-indigo-500 shadow-lg`
-//               - else: 'bg-gray-50 border-gray-200 hover:border-indigo-300'
-//               Base: rounded-2xl p-4 border-2 transition-all text-left cursor-pointer hover:scale-[1.02] active:scale-[0.98]>
-//
-//         Jika isRec: badge "Rekomendasi" (text-xs font-bold text-indigo-600, icon Target)
-//         Jika isSelected && !isRec: badge "Dipilih" (icon CheckSquare)
-//
-//         Angka SKS: text-4xl font-extrabold bg-gradient-to-r ${cfg.color} bg-clip-text text-transparent
-//         Label: "SKS · {sc.matkul_count} matkul" (text-xs text-gray-400 mb-3)
-//
-//         Stats (space-y-1.5):
-//           - "Prediksi IPS": flex justify-between text-xs
-//           - "IPK Baru": flex justify-between text-xs
-//
-//         Footer kartu: mt-2.5 flex items-center justify-between
-//           - Badge label SKS: px-2 py-0.5 rounded-full text-xs font-semibold ${cfg.text} ${cfg.bg}
-//           - Jika sc.matkul?.length > 0: tombol "Lihat" (icon BookOpen)
-//             onClick: e.stopPropagation() + setModalScenario(sc)
-//
-//   [4] Render modal jika modalScenario:
-//       {modalScenario && <MatkulListModal scenario={modalScenario} onClose={() => setModalScenario(null)} />}
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="card animate-slide-up">
+        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Prediksi Semester {st}</p>
+        <div className="flex items-baseline gap-2">
+          <span className={`text-5xl font-black tabular-nums ${getIPKColor(ips)}`}>{ips.toFixed(2)}</span>
+          <span className="text-sm font-bold text-gray-400">IPS</span>
+        </div>
+        <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 space-y-2">
+          <div className="flex justify-between text-xs font-bold">
+            <span className="text-gray-500">Prediksi IPK Baru</span>
+            <span className="text-gray-900 dark:text-white">{ipk.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between text-xs font-bold">
+            <span className="text-gray-500">Keyakinan</span>
+            <span className="text-emerald-500">{(prediksi.confidence * 100).toFixed(0)}%</span>
+          </div>
+        </div>
+        <div className="mt-4 px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 inline-flex items-center gap-2">
+          <Target className="w-3.5 h-3.5 text-indigo-500" />
+          <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-400 uppercase tracking-wider">Target Semester {st}</span>
+        </div>
+      </div>
 
-// ─── STEP 10: COMPONENT PilihMatkulModal ──────────────────────────────────────
-// Props: { allCourses, currentIPK, cumSks, onConfirm, onClose }
-//
-// Konstanta: const MIN_SKS = 12, MAX_SKS = 24
-//
-// - const wajibCourses = allCourses.filter(c => c.wajib)
-// - const pilihanCourses = allCourses.filter(c => !c.wajib)
-// - const wajibSks = wajibCourses.reduce((s, c) => s + c.sks, 0)
-//
-// State:
-// const [selected, setSelected] = useState(() => new Set(wajibCourses.map(c => c.kode)))
-// → Inisialisasi dengan semua matkul wajib sudah terpilih
-//
-// useMemo untuk totalSks:
-// const totalSks = useMemo(() => {
-//   return allCourses.filter(c => selected.has(c.kode)).reduce((s, c) => s + c.sks, 0)
-// }, [selected, allCourses])
-// → Recalculate hanya saat selected atau allCourses berubah
-//
-// toggle(kode, sks): toggle pilihan matkul pilihan
-// const toggle = (kode, sks) => {
-//   setSelected(prev => {
-//     const next = new Set(prev)
-//     if (next.has(kode)) {
-//       next.delete(kode)
-//     } else {
-//       const newTotal = totalSks + sks
-//       if (newTotal > MAX_SKS) return prev  // jangan tambah jika melebihi max
-//       next.add(kode)
-//     }
-//     return next
-//   })
-// }
-//
-// const isValid = totalSks >= MIN_SKS && totalSks <= MAX_SKS
-//
-// handleConfirm(): hitung IPS dan IPK dari matkul yang dipilih, lalu panggil onConfirm
-// const handleConfirm = () => {
-//   const chosenCourses = allCourses.filter(c => selected.has(c.kode))
-//   const ips = totalSks > 0
-//     ? chosenCourses.reduce((s, c) => s + c.prediksi_nilai_angka * c.sks, 0) / totalSks
-//     : 0
-//   const roundedIps = Math.round(ips * 100) / 100
-//   const totalSksNew = cumSks + totalSks
-//   const ipk = totalSksNew > 0
-//     ? Math.min(4, Math.max(0, Math.round(((cumSks * currentIPK + roundedIps * totalSks) / totalSksNew) * 100) / 100))
-//     : roundedIps
-//   onConfirm({ sks: totalSks, prediksi_ips: roundedIps, prediksi_ipk: ipk,
-//               matkul_count: chosenCourses.length, matkul: chosenCourses, isCustom: true })
-// }
-//
-// const sksColor = totalSks < MIN_SKS || totalSks > MAX_SKS ? 'text-red-500' : 'text-emerald-600 dark:text-emerald-400'
-//
-// Return JSX: modal overlay (fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm)
-//   Modal box: bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col
-//
-//   [1] Header: flex items-center justify-between px-5 py-4 border-b
-//       Kiri: icon ListChecks (gradient indigo-purple) + judul + "Min 12 · Maks 24 SKS"
-//       Kanan: tombol X
-//
-//   [2] SKS Counter: px-5 py-3 bg-gray-50 border-b flex items-center justify-between
-//       - "Total SKS dipilih:" (text-sm text-gray-600)
-//       - Angka: text-xl font-extrabold tabular-nums ${sksColor}
-//         Isi: {totalSks} / {MAX_SKS}
-//
-//   [3] Course List (flex-1 overflow-y-auto px-5 py-3 space-y-4):
-//
-//       [3a] Matkul Wajib (otomatis terpilih, tidak bisa di-uncheck):
-//            Label: "Matakuliah Wajib (otomatis terpilih)" (text-xs font-bold uppercase)
-//            Map wajibCourses → <div key={c.kode} class="flex items-center gap-3 p-2.5 rounded-xl bg-indigo-50 border border-indigo-100">
-//              <CheckSquare class="w-4 h-4 text-indigo-500 flex-shrink-0" />
-//              <div class="flex-1 min-w-0">
-//                <p> nama: text-sm font-medium truncate
-//                <p> kode: text-xs text-gray-400
-//              </div>
-//              <span> SKS: text-xs font-bold text-indigo-600
-//
-//       [3b] Matkul Pilihan (bisa di-toggle):
-//            Label: "Matakuliah Pilihan" (text-xs font-bold uppercase)
-//            Map pilihanCourses → render tombol toggle:
-//            - const isChecked = selected.has(c.kode)
-//            - const wouldExceed = !isChecked && totalSks + c.sks > MAX_SKS
-//            <button key={c.kode} onClick={() => toggle(c.kode, c.sks)}
-//                    disabled={wouldExceed}
-//                    class kondisional:
-//                    - isChecked: 'bg-emerald-50 border-emerald-200'
-//                    - wouldExceed: 'bg-gray-50 border-gray-100 opacity-40 cursor-not-allowed'
-//                    - else: 'bg-gray-50 border-gray-200 hover:border-indigo-300'>
-//              Checkbox square (w-4 h-4 rounded border-2 flex items-center justify-center):
-//                - isChecked: 'bg-emerald-500 border-emerald-500' + isi '✓' (text-white text-xs)
-//                - else: 'border-gray-300 dark:border-gray-600'
-//              Info (flex-1 min-w-0):
-//                <p> nama: text-sm font-medium truncate
-//                <p> kode + prediksi nilai: text-xs text-gray-400
-//              <span> SKS: text-xs font-bold text-gray-600
-//
-//   [4] Footer (px-5 py-4 border-t flex items-center justify-between gap-3):
-//       Kiri: validasi info
-//         - totalSks < MIN_SKS: "Minimal {MIN_SKS} SKS" (text-red-500)
-//         - totalSks > MAX_SKS: "Maksimal {MAX_SKS} SKS" (text-red-500)
-//         - isValid: "{totalSks} SKS · {selected.size} matkul" (text-emerald-600)
-//       Kanan: 2 tombol
-//         - "Batal": bg-gray-100 hover:bg-gray-200
-//         - "Konfirmasi": disabled jika !isValid
-//           isValid → gradient indigo-purple
-//           else    → bg-gray-300 cursor-not-allowed
+      <div className={`card animate-slide-up ${sksCfg.bg} border ${sksCfg.border}`}>
+        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Rekomendasi Beban SKS</p>
+        <div className="flex items-baseline gap-2">
+          <span className={`text-5xl font-black bg-gradient-to-r ${sksCfg.color} bg-clip-text text-transparent tabular-nums`}>{recSks}</span>
+          <span className="text-sm font-bold text-gray-400">SKS</span>
+          <span className={`ml-auto px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest ${sksCfg.text} ${sksCfg.bg} border ${sksCfg.border}`}>
+            {sksCfg.label}
+          </span>
+        </div>
+        <div className="mt-6">
+          <div className="w-full bg-gray-200 dark:bg-gray-700/50 rounded-full h-2.5 overflow-hidden">
+            <div className={`h-full rounded-full bg-gradient-to-r ${sksCfg.color}`} style={{ width: `${(recSks / 24) * 100}%` }} />
+          </div>
+          <p className="text-[10px] font-bold text-gray-400 mt-2 uppercase tracking-widest">{recSks} / 24 SKS MAKSIMUM</p>
+        </div>
+      </div>
+    </div>
+  )
+}
 
-// ─── STEP 11: COMPONENT CurrentSemesterCourses ────────────────────────────────
-// Props: { riwayat, semesterTarget, selectedScenario }
-//
-// - const lastSem = riwayat.length > 0 ? riwayat[riwayat.length - 1] : null
-// - Ambil matkul dari scenario atau fallback ke riwayat terakhir:
-//   const matkul = selectedScenario?.matkul ?? lastSem?.nilai_matkul ?? []
-//   const totalSks = selectedScenario?.sks ?? lastSem?.sks ?? 0
-//
-// Jika matkul kosong: render card dengan pesan "Data semester aktif belum tersedia"
-//
-// Return JSX: <div class="card animate-slide-up">
-//   [1] Header: flex flex-wrap items-start justify-between gap-3 mb-5
-//       Kiri: icon BookOpen (violet-purple) + judul "Matakuliah Semester {semesterTarget} (Sedang Berjalan)"
-//             + "{matkul.length} mata kuliah · {totalSks} SKS"
-//       Kanan: badge SKS (px-3 py-1.5 rounded-xl bg-indigo-50 border border-indigo-200)
-//
-//   [2] Daftar matkul (space-y-2 max-h-96 overflow-y-auto pr-1):
-//       Map matkul → render row:
-//       - const nilaiHuruf = c.prediksi_nilai_huruf ?? c.nilai_huruf
-//         → Support 2 format: dari scenario (prediksi_nilai_huruf) dan riwayat (nilai_huruf)
-//
-//       <div key={c.kode} class="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-700/40 border">
-//         Info (flex-1 min-w-0):
-//           - Baris meta: flex items-center gap-1.5 mb-0.5
-//             * <code> kode: text-xs font-mono text-gray-400
-//             * separator "·"
-//             * SKS: text-xs text-gray-500
-//             * Jika c.wajib !== undefined: badge "Wajib"/"Pilihan"
-//               Wajib: bg-indigo-50 text-indigo-500
-//               Pilihan: bg-gray-100 text-gray-400
-//           - <p> nama: text-sm font-medium text-gray-800 truncate
-//         Nilai (text-right flex-shrink-0):
-//           - Jika nilaiHuruf: badge nilai huruf (GRADE_BADGE) + nilai angka (text-xs text-gray-400)
-//           - Else: badge "Berlangsung" (bg-amber-50 text-amber-600 border-amber-200)
+function MatkulListModal({ scenario, onClose }) {
+  if (!scenario) return null
+  const cfg = SKS_CONFIG[scenario.sks] || SKS_CONFIG[22]
 
-// ─── STEP 12: COMPONENT GradeHistory ──────────────────────────────────────────
-// Props: { riwayat }
-//
-// - const GRADE_COLORS = { A: 'grade-A', AB: 'grade-AB', ... E: 'grade-E' }
-//   (definisikan di luar atau di dalam component)
-//
-// - const [openSem, setOpenSem] = useState(
-//     riwayat.length > 0 ? riwayat[riwayat.length - 1].semester : null
-//   )
-//
-// Return JSX: <div class="card animate-slide-up">
-//   [1] Header: icon History (violet-purple) + "Riwayat Nilai" + "Nilai historis semester 1 s.d. {riwayat.length}"
-//
-//   [2] Accordion list (space-y-3):
-//       Map riwayat → accordion item (border rounded-xl overflow-hidden):
-//
-//       [2a] Tombol header:
-//            onClick: setOpenSem(openSem === sem.semester ? null : sem.semester)
-//            Kiri: kotak nomor (warna berdasarkan IPS) + "Semester X" + "{sks} SKS · {matkul.length} matkul"
-//            Kanan: IPS display + chevron icon (kondisional)
-//
-//       [2b] Detail (hanya jika openSem === sem.semester):
-//            - Header kolom (hidden sm:grid grid-cols-12): Kode, Mata Kuliah, SKS, Nilai, Angka
-//            - Map nilai_matkul → 2 versi row:
-//              * Desktop (hidden sm:grid grid-cols-12): kode, nama, sks, badge nilai, angka
-//              * Mobile (sm:hidden flex): nama + sks, badge nilai
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col overflow-hidden animate-slide-up" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-3">
+            <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${cfg.color} flex items-center justify-center text-white`}>
+              <BookOpen className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="font-bold text-gray-900 dark:text-white">Daftar Matakuliah</h3>
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{scenario.sks} SKS Terpilih</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
-// ─── STEP 13: COMPONENT AcademicNotes ─────────────────────────────────────────
-// Props: { catatan }
-//
-// Return JSX: <div class="card animate-slide-up">
-//   [1] Header: icon MessageSquare (amber-orange) + "Catatan Akademik" + "Rekomendasi dan analisis performa"
-//   [2] Kotak catatan: bg-amber-50 border border-amber-200 rounded-xl p-4
-//       <p class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{catatan}</p>
-//   [3] Info disclaimer: bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-start gap-2
-//       <Info class="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
-//       <p class="text-xs text-blue-700 leading-relaxed">
-//         "Prediksi dihasilkan berdasarkan data historis menggunakan algoritma weighted average
-//          (Sem3:50%, Sem2:30%, Sem1:20%). Hasil bersifat estimasi. ..."
-//       </p>
+        <div className="px-6 py-4 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 grid grid-cols-3 gap-3 text-center">
+          <div>
+            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">Total SKS</p>
+            <p className="text-lg font-black text-gray-900 dark:text-white">{scenario.sks}</p>
+          </div>
+          <div>
+            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">Prediksi IPS</p>
+            <p className={`text-lg font-black ${getIPKColor(scenario.prediksi_ips)}`}>{scenario.prediksi_ips.toFixed(2)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">IPK Baru</p>
+            <p className="text-lg font-black text-gray-900 dark:text-white">{scenario.prediksi_ipk.toFixed(2)}</p>
+          </div>
+        </div>
 
-// ─── STEP 14: COMPONENT GraduationPage ────────────────────────────────────────
-// Props: { data }
-// Ditampilkan jika data.status === 'lulus'
-//
-// - const prodi_color = PRODI_COLORS[data.prodi_key] || 'from-indigo-500 to-purple-600'
-// - const ipk = data.ipk_kumulatif
-//
-// Return JSX: <div class="max-w-3xl mx-auto px-4 sm:px-6 py-12 animate-fade-in">
-//   [1] Breadcrumb: <Link to="/"> + separator + NIM
-//   [2] Gradient strip: h-1.5 rounded-full bg-gradient-to-r ${prodi_color} mb-6
-//   [3] Card utama (text-center):
-//       - Avatar GraduationCap (w-20 h-20 rounded-3xl, gradient bg)
-//       - Badge "LULUS" (bg-emerald-100 border-emerald-200, icon Award)
-//       - Nama mahasiswa (text-2xl font-extrabold)
-//       - Info: NIM · prodi · angkatan
-//       - Grid 2 kolom: IPK Kumulatif + Semester Ditempuh
-//       - Progress bar IPK
-//       - Tombol "Kembali ke Beranda" (btn-primary, icon ArrowLeft)
-//   [4] Jika ada riwayat: render <GradeHistory riwayat={data.riwayat_semester} />
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
+          {scenario.matkul.map((mk) => (
+            <div key={mk.kode} className="flex items-center gap-4 p-3 rounded-2xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{mk.nama}</p>
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{mk.kode} · {mk.wajib ? 'Wajib' : 'Pilihan'}</p>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <p className="text-[10px] font-black text-gray-500 uppercase mb-1">{mk.sks} SKS</p>
+                {mk.prediksi_nilai_huruf && (
+                  <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black ${GRADE_BADGE[mk.prediksi_nilai_huruf]}`}>
+                    {mk.prediksi_nilai_huruf}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
 
-// ─── STEP 15: MAIN COMPONENT Dashboard (default export) ───────────────────────
-// export default function Dashboard()
-//
-// STEP 15a: Hooks dan state
-// const { nim } = useParams()  → ambil NIM dari URL parameter
-// const [data, setData] = useState(null)
-// const [loading, setLoading] = useState(true)
-// const [error, setError] = useState('')
-// const [selectedSks, setSelectedSks] = useState(null)       → SKS yang dipilih user
-// const [customScenario, setCustomScenario] = useState(null) → scenario kustom dari PilihMatkul
-// const [showPilihMatkul, setShowPilihMatkul] = useState(false)
-//
-// STEP 15b: Fetch data function
-// const fetchData = async () => {
-//   setLoading(true); setError(''); setCustomScenario(null); setSelectedSks(null)
-//   try {
-//     const result = await getPredict(nim)
-//     setData(result)
-//   } catch (err) {
-//     setError(err.message || 'Terjadi kesalahan saat memuat data.')
-//   } finally {
-//     setLoading(false)
-//   }
-// }
-//
-// STEP 15c: useEffect untuk fetch saat NIM berubah
-// useEffect(() => { fetchData() }, [nim])
-//
-// STEP 15d: Render kondisional
-//
-// Jika loading:
-// return (
-//   <div class="max-w-6xl mx-auto px-4 py-12">
-//     <LoadingSpinner message="Memuat data dan menghitung prediksi..." />
-//   </div>
-// )
-//
-// Jika error:
-// return (
-//   <div class="max-w-2xl mx-auto px-4 py-20 text-center">
-//     <div class="card">
-//       Icon AlertCircle (w-16 h-16 rounded-2xl bg-red-100, icon merah)
-//       <h2> "Data Tidak Ditemukan"
-//       <p> {error}
-//       2 tombol: "Kembali" (Link to="/", btn-secondary) + "Coba Lagi" (onClick=fetchData, btn-primary)
-//     </div>
-//   </div>
-// )
-//
-// Jika !data: return null
-//
-// Jika data.status === 'lulus': return <GraduationPage data={data} />
-//
-// STEP 15e: Destructure data
-// const { prediksi, riwayat_semester, ...student } = data
-// const prodi_key = data.prodi_key
-//
-// STEP 15f: Hitung nilai efektif
-// const effectiveSks = selectedSks ?? prediksi?.rekomendasi_sks
-// const selectedScenario = customScenario
-//   ?? prediksi?.sks_scenarios?.find(s => s.sks === effectiveSks)
-//   ?? null
-// const cumSks = riwayat_semester.reduce((s, sem) => s + sem.sks, 0)
-//
-// STEP 15g: Return JSX utama
-// <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 animate-fade-in">
-//
-//   [1] Breadcrumb (flex items-center gap-1.5 sm:gap-2 mb-5 sm:mb-6 flex-wrap):
-//       - <Link to="/"> dengan icon ArrowLeft + "Beranda"
-//       - Separator "/"
-//       - "Dashboard" (hidden sm:inline)
-//       - Separator "/"
-//       - NIM (font-mono font-bold text-indigo-600, truncate max-w-[100px] sm:max-w-none)
-//       - ml-auto: tanggal generated_at (hidden sm:flex, icon Calendar) + tombol Refresh
-//
-//   [2] Gradient accent bar:
-//       <div class={`h-1.5 rounded-full bg-gradient-to-r ${PRODI_COLORS[prodi_key] || '...'} mb-6`} />
-//
-//   [3] Section 1 — Student Profile (mb-6):
-//       <StudentProfileCard student={student} prediksi={prediksi} />
-//
-//   [4] Section 2 — Prediction Summary (mb-6):
-//       <PredictionSummaryCards prediksi={prediksi} currentIPK={student.ipk_kumulatif}
-//                               selectedScenario={selectedScenario} />
-//
-//   [5] Section 3 — Trend Chart (mb-6):
-//       <TrendChart riwayat={riwayat_semester}
-//                   prediksiIPS={prediksi.prediksi_ips}
-//                   prediksiIPK={prediksi.prediksi_ipk_baru}
-//                   semesterTarget={prediksi.semester_target}
-//                   selectedScenario={selectedScenario} />
-//
-//   [6] Section 4 — SKS Scenarios (mb-6, hanya jika sks_scenarios ada):
-//       {prediksi.sks_scenarios && prediksi.sks_scenarios.length > 0 && (
-//         <SKSScenarios
-//           scenarios={prediksi.sks_scenarios}
-//           rekomendasi_sks={prediksi.rekomendasi_sks}
-//           selectedSks={effectiveSks}
-//           onSelectSks={(sks) => { setSelectedSks(sks); setCustomScenario(null) }}
-//           onOpenPilihMatkul={() => setShowPilihMatkul(true)}
-//           isCustom={!!customScenario}
-//           onReset={() => { setCustomScenario(null); setSelectedSks(null) }}
-//         />
-//       )}
-//
-//   [7] Modal Pilih Matakuliah (hanya jika showPilihMatkul && prediksi.all_semester_courses):
-//       <PilihMatkulModal
-//         allCourses={prediksi.all_semester_courses}
-//         currentIPK={student.ipk_kumulatif}
-//         cumSks={cumSks}
-//         onConfirm={(scenario) => { setCustomScenario(scenario); setShowPilihMatkul(false) }}
-//         onClose={() => setShowPilihMatkul(false)}
-//       />
-//
-//   [8] Section 5 — Current Semester Courses (mb-6):
-//       <CurrentSemesterCourses riwayat={riwayat_semester}
-//                               semesterTarget={prediksi.semester_target}
-//                               selectedScenario={selectedScenario} />
-//
-//   [9] Section 6+7 — Grade History + Academic Notes (grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6):
-//       Kolom kiri (space-y-6):
-//         - <IPKTargetAssistant nim={nim} riwayatSemester={riwayat_semester}
-//                               semesterAktif={student.semester_aktif}
-//                               currentIPK={student.ipk_kumulatif}
-//                               prediksiIPK={prediksi.prediksi_ipk_baru} />
-//         - <GradeHistory riwayat={riwayat_semester} />
-//       Kolom kanan (space-y-6):
-//         - <AcademicNotes catatan={prediksi.catatan_akademik} />
-//         - Quick performance summary card:
-//           <div class="card">
-//             Header: icon Award + "Ringkasan Performa"
-//             Map riwayat_semester → progress bar row:
-//               flex items-center gap-3:
-//               - Label "Semester X" (w-24 text-sm text-gray-500 flex-shrink-0)
-//               - Track bar (flex-1 bg-gray-100 rounded-full h-2 overflow-hidden):
-//                 Fill warna berdasarkan IPS:
-//                 >= 3.5 → from-emerald-400 to-green-500
-//                 >= 3.0 → from-blue-400 to-indigo-500
-//                 >= 2.5 → from-yellow-400 to-amber-500
-//                 else   → from-red-400 to-rose-500
-//                 style={{ width: `${(sem.ips / 4.0) * 100}%` }}
-//               - Nilai IPS (w-10 text-right text-sm font-bold tabular-nums)
-//             Row prediksi (pt-2 border-t):
-//               - Label "Prediksi Sem X (Aktif)" (text-indigo-600, w-24)
-//               - Track bar indigo-purple
-//               - Nilai prediksi IPS (text-indigo-600)
-//               Nilai: selectedScenario ? selectedScenario.prediksi_ips : prediksi.prediksi_ips
-//
-//   [10] Footer (text-center py-6 border-t border-gray-100 dark:border-gray-800):
-//        <p class="text-sm text-gray-400 dark:text-gray-500">
-//          Data bersifat sintetis untuk keperluan demonstrasi sistem · AcadPredict 2024
-//        </p>
+        <div className="p-6 border-t border-gray-100 dark:border-gray-800">
+          <button onClick={onClose} className="w-full py-3 rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-bold text-sm transition-colors hover:bg-gray-200">
+            Tutup
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
-// ─── CATATAN PENTING ──────────────────────────────────────────────────────────
-// - useParams(): hook React Router untuk ambil parameter URL (:nim)
-// - useEffect dengan [nim]: re-fetch saat NIM berubah (navigasi antar mahasiswa)
-// - selectedScenario: null jika tidak ada custom/pilihan, atau object scenario
-//   Digunakan oleh TrendChart, PredictionSummaryCards, CurrentSemesterCourses
-//   untuk menampilkan data sesuai scenario yang dipilih
-// - customScenario: hasil dari PilihMatkulModal (scenario kustom user)
-// - effectiveSks: selectedSks ?? rekomendasi_sks (fallback ke rekomendasi)
-// - cumSks: total SKS yang sudah ditempuh (untuk kalkulasi IPK baru di PilihMatkul)
-// - data.status === 'lulus': mahasiswa sudah lulus, tampilkan GraduationPage
-// - Semua sub-component didefinisikan di file yang sama (tidak di-import)
-//   karena mereka sangat spesifik untuk halaman ini
-// - Urutan render section mengikuti alur informasi: profil → prediksi → chart
-//   → simulasi → matkul aktif → riwayat → catatan
+function SKSScenarios({ scenarios, rekomendasi_sks, selectedSks, onSelectSks, onOpenPilihMatkul, isCustom, onReset }) {
+  const [modalScenario, setModalScenario] = useState(null)
+
+  return (
+    <div className="card animate-slide-up">
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-lg">
+            <Award className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="section-title">Simulasi SKS</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Pilih skenario beban SKS untuk melihat proyeksi IPK Anda.</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          {isCustom && (
+            <button onClick={onReset} className="btn-secondary py-2 px-4 text-xs">
+              <RotateCcw className="w-3.5 h-3.5" /> Reset
+            </button>
+          )}
+          <button onClick={onOpenPilihMatkul} className="btn-primary py-2 px-4 text-xs">
+            <ListChecks className="w-3.5 h-3.5" /> Pilih Matakuliah
+          </button>
+        </div>
+      </div>
+
+      {isCustom && (
+        <div className="mb-6 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 rounded-2xl px-4 py-3 flex items-center gap-3">
+          <CheckSquare className="w-5 h-5 text-indigo-500 flex-shrink-0" />
+          <p className="text-xs font-bold text-indigo-700 dark:text-indigo-300">Menggunakan pilihan matakuliah kustom. Klik Reset untuk kembali ke skenario rekomendasi.</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {scenarios.map((sc) => {
+          const cfg = SKS_CONFIG[sc.sks] || SKS_CONFIG[22]
+          const isRec = sc.sks === rekomendasi_sks
+          const isSelected = !isCustom && sc.sks === selectedSks
+
+          return (
+            <button
+              key={sc.sks}
+              onClick={() => onSelectSks(sc.sks)}
+              className={`rounded-2xl p-5 border-2 transition-all text-left relative overflow-hidden group hover:scale-[1.02] active:scale-[0.98] ${
+                isSelected ? `${cfg.bg} ${cfg.border} ring-2 ring-indigo-500 ring-offset-2 dark:ring-offset-gray-900` : 'bg-gray-50 dark:bg-gray-800/50 border-gray-100 dark:border-gray-800 hover:border-indigo-300 dark:hover:border-indigo-700'
+              }`}
+            >
+              <div className="flex justify-between items-start mb-2">
+                <span className={`text-4xl font-black bg-gradient-to-r ${cfg.color} bg-clip-text text-transparent`}>{sc.sks}</span>
+                {isRec && (
+                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 text-[8px] font-black uppercase tracking-widest">
+                    <Target className="w-2.5 h-2.5" /> Rekomendasi
+                  </div>
+                )}
+                {isSelected && !isRec && (
+                  <CheckSquare className="w-4 h-4 text-indigo-500" />
+                )}
+              </div>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">SKS · {sc.matkul_count} matkul</p>
+              
+              <div className="space-y-2 mb-4">
+                <div className="flex justify-between text-[10px] font-bold">
+                  <span className="text-gray-500">IPS</span>
+                  <span className={getIPKColor(sc.prediksi_ips)}>{sc.prediksi_ips.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-[10px] font-bold">
+                  <span className="text-gray-500">IPK</span>
+                  <span className="text-gray-900 dark:text-white">{sc.prediksi_ipk.toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between mt-auto pt-4 border-t border-gray-100 dark:border-gray-700/50">
+                <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${cfg.text} ${cfg.bg} border ${cfg.border}`}>
+                  {cfg.label}
+                </span>
+                {sc.matkul?.length > 0 && (
+                  <div
+                    onClick={(e) => { e.stopPropagation(); setModalScenario(sc) }}
+                    className="p-1.5 rounded-lg bg-white dark:bg-gray-700 shadow-sm border border-gray-100 dark:border-gray-600 hover:text-indigo-600 transition-colors"
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                  </div>
+                )}
+              </div>
+            </button>
+          )
+        })}
+      </div>
+
+      {modalScenario && <MatkulListModal scenario={modalScenario} onClose={() => setModalScenario(null)} />}
+    </div>
+  )
+}
+
+function PilihMatkulModal({ allCourses, currentIPK, cumSks, onConfirm, onClose }) {
+  const MIN_SKS = 12
+  const MAX_SKS = 24
+
+  const wajibCourses = allCourses.filter(c => c.wajib)
+  const pilihanCourses = allCourses.filter(c => !c.wajib)
+
+  const [selected, setSelected] = useState(() => new Set(wajibCourses.map(c => c.kode)))
+
+  const totalSks = useMemo(() => {
+    return allCourses.filter(c => selected.has(c.kode)).reduce((s, c) => s + c.sks, 0)
+  }, [selected, allCourses])
+
+  const toggle = (kode, sks) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(kode)) {
+        next.delete(kode)
+      } else {
+        if (totalSks + sks > MAX_SKS) return prev
+        next.add(kode)
+      }
+      return next
+    })
+  }
+
+  const handleConfirm = () => {
+    const chosenCourses = allCourses.filter(c => selected.has(c.kode))
+    const totalPoin = chosenCourses.reduce((s, c) => s + (c.prediksi_nilai_angka || 0) * c.sks, 0)
+    const ips = totalSks > 0 ? totalPoin / totalSks : 0
+    const roundedIps = Math.round(ips * 100) / 100
+    
+    const totalSksNew = cumSks + totalSks
+    const totalPoinNew = (cumSks * currentIPK) + (roundedIps * totalSks)
+    const ipk = totalSksNew > 0 ? Math.min(4, Math.max(0, totalPoinNew / totalSksNew)) : roundedIps
+    const roundedIpk = Math.round(ipk * 100) / 100
+
+    onConfirm({
+      sks: totalSks,
+      prediksi_ips: roundedIps,
+      prediksi_ipk: roundedIpk,
+      matkul_count: chosenCourses.length,
+      matkul: chosenCourses,
+      isCustom: true
+    })
+  }
+
+  const isValid = totalSks >= MIN_SKS && totalSks <= MAX_SKS
+  const sksColor = totalSks < MIN_SKS || totalSks > MAX_SKS ? 'text-red-500' : 'text-emerald-600 dark:text-emerald-400'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-slide-up" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white">
+              <ListChecks className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="font-bold text-gray-900 dark:text-white">Pilih Matakuliah</h3>
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Min {MIN_SKS} · Maks {MAX_SKS} SKS</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="px-6 py-4 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+          <span className="text-sm font-bold text-gray-600 dark:text-gray-400">Total SKS dipilih:</span>
+          <span className={`text-2xl font-black tabular-nums ${sksColor}`}>{totalSks} / {MAX_SKS}</span>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+          <div className="space-y-3">
+            <h4 className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Matakuliah Wajib (Otomatis)</h4>
+            {wajibCourses.map(c => (
+              <div key={c.kode} className="flex items-center gap-4 p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-800">
+                <CheckSquare className="w-5 h-5 text-indigo-500 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{c.nama}</p>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{c.kode}</p>
+                </div>
+                <span className="text-xs font-black text-indigo-600 dark:text-indigo-400">{c.sks} SKS</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="space-y-3">
+            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Matakuliah Pilihan</h4>
+            {pilihanCourses.map(c => {
+              const isChecked = selected.has(c.kode)
+              const wouldExceed = !isChecked && totalSks + c.sks > MAX_SKS
+              return (
+                <button
+                  key={c.kode}
+                  disabled={wouldExceed}
+                  onClick={() => toggle(c.kode, c.sks)}
+                  className={`w-full flex items-center gap-4 p-3 rounded-2xl border-2 transition-all text-left ${
+                    isChecked ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-500' : 
+                    wouldExceed ? 'bg-gray-50 dark:bg-gray-800/30 border-gray-100 dark:border-gray-800 opacity-40 cursor-not-allowed' :
+                    'bg-gray-50 dark:bg-gray-800/50 border-gray-100 dark:border-gray-800 hover:border-indigo-300'
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                    isChecked ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300 dark:border-gray-600'
+                  }`}>
+                    {isChecked && <span className="text-[10px] font-black">✓</span>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{c.nama}</p>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                      {c.kode} {c.prediksi_nilai_huruf ? `· Est. ${c.prediksi_nilai_huruf}` : ''}
+                    </p>
+                  </div>
+                  <span className="text-xs font-black text-gray-600 dark:text-gray-400">{c.sks} SKS</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="p-6 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-4">
+          <div className="flex-1">
+            {!isValid && (
+              <p className="text-xs font-bold text-red-500">
+                {totalSks < MIN_SKS ? `Minimal ${MIN_SKS} SKS` : `Maksimal ${MAX_SKS} SKS`}
+              </p>
+            )}
+            {isValid && (
+              <p className="text-xs font-bold text-emerald-600">
+                {totalSks} SKS · {selected.size} matkul dipilih
+              </p>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="btn-secondary py-2.5 px-4 text-sm">Batal</button>
+            <button
+              onClick={handleConfirm}
+              disabled={!isValid}
+              className={`btn-primary py-2.5 px-6 text-sm ${!isValid ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
+            >
+              Konfirmasi
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CurrentSemesterCourses({ riwayat, semesterTarget, selectedScenario }) {
+  const lastSem = riwayat.length > 0 ? riwayat[riwayat.length - 1] : null
+  const matkul = selectedScenario?.matkul ?? lastSem?.nilai_matkul ?? []
+  const totalSks = selectedScenario?.sks ?? lastSem?.sks ?? 0
+
+  return (
+    <div className="card animate-slide-up">
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white shadow-lg">
+            <BookOpen className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="section-title">Matakuliah Semester {semesterTarget}</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{matkul.length} mata kuliah · {totalSks} SKS</p>
+          </div>
+        </div>
+        <div className="px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 text-xs font-bold text-indigo-600 dark:text-indigo-400">
+          Sedang Berjalan
+        </div>
+      </div>
+
+      <div className="space-y-2 max-h-96 overflow-y-auto pr-1 custom-scrollbar">
+        {matkul.length === 0 ? (
+          <div className="py-12 text-center bg-gray-50 dark:bg-gray-800/30 rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-800">
+            <p className="text-sm font-bold text-gray-400">Data semester aktif belum tersedia</p>
+          </div>
+        ) : (
+          matkul.map((c) => {
+            const nilaiHuruf = c.prediksi_nilai_huruf ?? c.nilai_huruf
+            return (
+              <div key={c.kode} className="flex items-center gap-4 p-4 rounded-2xl bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <code className="text-[10px] font-mono text-gray-400">{c.kode}</code>
+                    <span className="text-gray-300 dark:text-gray-700">·</span>
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{c.sks} SKS</span>
+                    {c.wajib !== undefined && (
+                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${c.wajib ? 'bg-indigo-50 text-indigo-500 dark:bg-indigo-900/30' : 'bg-gray-100 text-gray-400 dark:bg-gray-700'}`}>
+                        {c.wajib ? 'Wajib' : 'Pilihan'}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm font-bold text-gray-800 dark:text-gray-200 truncate">{c.nama}</p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  {nilaiHuruf ? (
+                    <div className="flex flex-col items-end gap-1">
+                      <span className={`px-2.5 py-0.5 rounded-lg text-xs font-black shadow-sm ${GRADE_BADGE[nilaiHuruf] || 'bg-gray-100 text-gray-700'}`}>
+                        {nilaiHuruf}
+                      </span>
+                      {c.prediksi_nilai_angka && (
+                        <span className="text-[10px] font-bold text-gray-400 tabular-nums">
+                          {c.prediksi_nilai_angka.toFixed(1)}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-800 text-[10px] font-black uppercase tracking-widest">
+                      Berlangsung
+                    </span>
+                  )}
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+    </div>
+  )
+}
+
+function AcademicNotes({ catatan }) {
+  return (
+    <div className="card animate-slide-up">
+      <div className="flex items-center gap-3 mb-5">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white shadow-lg">
+          <MessageSquare className="w-6 h-6" />
+        </div>
+        <div>
+          <h3 className="section-title">Catatan Akademik</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Rekomendasi dan analisis performa</p>
+        </div>
+      </div>
+      
+      <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-800 rounded-2xl p-4 mb-4">
+        <p className="text-sm text-amber-900 dark:text-amber-300 leading-relaxed italic font-medium">"{catatan}"</p>
+      </div>
+
+      <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800 rounded-2xl p-4 flex items-start gap-3">
+        <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+        <p className="text-xs text-blue-800 dark:text-blue-300 leading-relaxed font-medium">
+          Prediksi dihasilkan berdasarkan data historis menggunakan algoritma weighted average (Sem3:50%, Sem2:30%, Sem1:20%). 
+          Hasil bersifat estimasi untuk membantu perencanaan akademik Anda secara mandiri.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function GraduationPage({ data }) {
+  const prodi_color = PRODI_COLORS[data.prodi_key] || 'from-indigo-500 to-purple-600'
+  const ipk = data.ipk_kumulatif
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 animate-fade-in">
+      <div className="flex items-center gap-2 mb-8 text-sm font-bold text-gray-500 uppercase tracking-widest">
+        <Link to="/" className="hover:text-indigo-600 flex items-center gap-1 transition-colors">
+          <ArrowLeft className="w-4 h-4" /> Beranda
+        </Link>
+        <span>/</span>
+        <span className="text-indigo-600 font-mono">{data.nim}</span>
+      </div>
+
+      <div className={`h-2 rounded-full bg-gradient-to-r ${prodi_color} mb-8 shadow-sm`} />
+
+      <div className="card text-center py-12 relative overflow-hidden">
+        <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${prodi_color} opacity-5 blur-3xl`} />
+        
+        <div className={`w-24 h-24 rounded-[2rem] bg-gradient-to-br ${prodi_color} flex items-center justify-center text-white mx-auto mb-6 shadow-2xl rotate-3`}>
+          <GraduationCap className="w-12 h-12 -rotate-3" />
+        </div>
+
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-100 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 text-xs font-black uppercase tracking-widest mb-4">
+          <Award className="w-4 h-4" /> LULUS
+        </div>
+
+        <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-2">{data.nama}</h2>
+        <p className="text-sm font-bold text-gray-500 dark:text-gray-400 mb-8">
+          {data.nim} · {data.prodi} · Angkatan {data.angkatan}
+        </p>
+
+        <div className="grid grid-cols-2 gap-4 max-w-sm mx-auto mb-8">
+          <div className="p-4 rounded-2xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700">
+            <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">IPK Kumulatif</p>
+            <p className="text-2xl font-black text-emerald-600">{ipk.toFixed(2)}</p>
+          </div>
+          <div className="p-4 rounded-2xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700">
+            <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Masa Studi</p>
+            <p className="text-2xl font-black text-gray-800 dark:text-white">{data.riwayat_semester.length} Semester</p>
+          </div>
+        </div>
+
+        <div className="max-w-md mx-auto mb-10">
+          <div className="flex justify-between text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
+            <span>Progress IPK</span>
+            <span>{ipk.toFixed(2)} / 4.00</span>
+          </div>
+          <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-3 overflow-hidden">
+            <div className={`h-full rounded-full ${getIPKBg(ipk)} transition-all duration-1000`} style={{ width: `${(ipk / 4) * 100}%` }} />
+          </div>
+        </div>
+
+        <Link to="/" className="btn-primary py-4 px-8 rounded-2xl font-black uppercase tracking-widest text-sm inline-flex items-center gap-2">
+          <ArrowLeft className="w-5 h-5" /> Kembali ke Beranda
+        </Link>
+      </div>
+
+      <div className="mt-8">
+        <GradeHistoryTable riwayat={data.riwayat_semester} />
+      </div>
+    </div>
+  )
+}
+
+export default function Dashboard() {
+  const { nim } = useParams()
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [selectedSks, setSelectedSks] = useState(null)
+  const [customScenario, setCustomScenario] = useState(null)
+  const [showPilihMatkul, setShowPilihMatkul] = useState(false)
+
+  const fetchData = async () => {
+    setLoading(true)
+    setError('')
+    setCustomScenario(null)
+    setSelectedSks(null)
+    try {
+      const result = await getPredict(nim)
+      setData(result)
+    } catch (err) {
+      setError(err.message || 'Terjadi kesalahan saat memuat data.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (nim) fetchData()
+  }, [nim])
+
+  if (loading) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 py-20">
+        <LoadingSpinner message="Memuat data dan menghitung prediksi akademik..." />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-20 text-center">
+        <div className="card p-10 flex flex-col items-center">
+          <div className="w-20 h-20 rounded-3xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-600 mb-6 shadow-lg rotate-3">
+            <AlertCircle className="w-10 h-10" />
+          </div>
+          <h2 className="text-2xl font-black text-gray-900 dark:text-white mb-2">Data Tidak Ditemukan</h2>
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-8 max-w-sm mx-auto">{error}</p>
+          <div className="flex gap-3">
+            <Link to="/" className="btn-secondary py-3 px-6 rounded-2xl text-sm font-bold">Kembali</Link>
+            <button onClick={fetchData} className="btn-primary py-3 px-6 rounded-2xl text-sm font-bold flex items-center gap-2">
+              <RefreshCw className="w-4 h-4" /> Coba Lagi
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!data) return null
+  if (data.status === 'lulus') return <GraduationPage data={data} />
+
+  const { prediksi, riwayat_semester, ...student } = data
+  const prodi_key = data.prodi_key
+
+  const effectiveSks = selectedSks ?? prediksi?.rekomendasi_sks
+  const selectedScenario = customScenario
+    ?? prediksi?.sks_scenarios?.find(s => s.sks === effectiveSks)
+    ?? null
+  
+  const cumSks = riwayat_semester.reduce((s, sem) => s + sem.sks, 0)
+
+  return (
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-2 mb-6 text-[10px] font-black text-gray-400 uppercase tracking-widest flex-wrap">
+        <Link to="/" className="flex items-center gap-1 hover:text-indigo-600 transition-colors">
+          <ArrowLeft className="w-3.5 h-3.5" /> Beranda
+        </Link>
+        <span className="text-gray-200">/</span>
+        <span className="hidden sm:inline">Dashboard</span>
+        <span className="hidden sm:inline text-gray-200">/</span>
+        <span className="text-indigo-600 font-mono tabular-nums">{nim}</span>
+        
+        <div className="ml-auto flex items-center gap-4">
+          <div className="hidden sm:flex items-center gap-1.5 text-gray-400">
+            <Calendar className="w-3.5 h-3.5" />
+            <span>Updated: {new Date(data.generated_at).toLocaleDateString()}</span>
+          </div>
+          <button onClick={fetchData} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" title="Refresh Data">
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      <div className={`h-2 rounded-full bg-gradient-to-r ${PRODI_COLORS[prodi_key] || 'from-indigo-500 to-purple-600'} mb-8 shadow-sm`} />
+
+      <div className="space-y-6">
+        <StudentCard student={student} />
+
+        <PredictionSummaryCards 
+          prediksi={prediksi} 
+          currentIPK={student.ipk_kumulatif} 
+          selectedScenario={selectedScenario} 
+        />
+
+        <IPKChart 
+          riwayat={riwayat_semester}
+          prediksiIPS={selectedScenario?.prediksi_ips ?? prediksi.prediksi_ips}
+          prediksiIPK={selectedScenario?.prediksi_ipk ?? prediksi.prediksi_ipk_baru}
+          semesterTarget={prediksi.semester_target}
+        />
+
+        {prediksi.sks_scenarios && prediksi.sks_scenarios.length > 0 && (
+          <SKSScenarios
+            scenarios={prediksi.sks_scenarios}
+            rekomendasi_sks={prediksi.rekomendasi_sks}
+            selectedSks={effectiveSks}
+            onSelectSks={(sks) => { setSelectedSks(sks); setCustomScenario(null) }}
+            onOpenPilihMatkul={() => setShowPilihMatkul(true)}
+            isCustom={!!customScenario}
+            onReset={() => { setCustomScenario(null); setSelectedSks(null) }}
+          />
+        )}
+
+        {showPilihMatkul && prediksi.all_semester_courses && (
+          <PilihMatkulModal
+            allCourses={prediksi.all_semester_courses}
+            currentIPK={student.ipk_kumulatif}
+            cumSks={cumSks}
+            onConfirm={(scenario) => { setCustomScenario(scenario); setShowPilihMatkul(false) }}
+            onClose={() => setShowPilihMatkul(false)}
+          />
+        )}
+
+        <CurrentSemesterCourses 
+          riwayat={riwayat_semester}
+          semesterTarget={prediksi.semester_target}
+          selectedScenario={selectedScenario}
+        />
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="space-y-6">
+            <IPKTargetAssistant 
+              nim={nim}
+              riwayatSemester={riwayat_semester}
+              semesterAktif={student.semester_aktif}
+              currentIPK={student.ipk_kumulatif}
+              prediksiIPK={prediksi.prediksi_ipk_baru}
+            />
+            <GradeHistoryTable riwayat={riwayat_semester} />
+          </div>
+          <div className="space-y-6">
+            <AcademicNotes catatan={prediksi.catatan_akademik} />
+            
+            <div className="card">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600">
+                  <Award className="w-6 h-6" />
+                </div>
+                <h3 className="section-title">Ringkasan Performa</h3>
+              </div>
+              <div className="space-y-4">
+                {riwayat_semester.map((sem) => {
+                  let colorClass = 'from-red-400 to-rose-500'
+                  if (sem.ips >= 3.5) colorClass = 'from-emerald-400 to-green-500'
+                  else if (sem.ips >= 3.0) colorClass = 'from-blue-400 to-indigo-500'
+                  else if (sem.ips >= 2.5) colorClass = 'from-yellow-400 to-amber-500'
+
+                  return (
+                    <div key={sem.semester} className="flex items-center gap-4">
+                      <span className="w-24 text-[10px] font-black uppercase tracking-widest text-gray-500">Semester {sem.semester}</span>
+                      <div className="flex-1 bg-gray-100 dark:bg-gray-800 rounded-full h-2 overflow-hidden border border-gray-50 dark:border-gray-800/50">
+                        <div className={`h-full rounded-full bg-gradient-to-r ${colorClass}`} style={{ width: `${(sem.ips / 4) * 100}%` }} />
+                      </div>
+                      <span className="w-10 text-right text-sm font-black text-gray-700 dark:text-gray-300 tabular-nums">{sem.ips.toFixed(2)}</span>
+                    </div>
+                  )
+                })}
+                <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
+                  <div className="flex items-center gap-4">
+                    <span className="w-24 text-[10px] font-black uppercase tracking-widest text-indigo-600">Prediksi S{prediksi.semester_target}</span>
+                    <div className="flex-1 bg-indigo-50 dark:bg-indigo-900/20 rounded-full h-2 overflow-hidden border border-indigo-100 dark:border-indigo-800/50">
+                      <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-600" style={{ width: `${((selectedScenario?.prediksi_ips ?? prediksi.prediksi_ips) / 4) * 100}%` }} />
+                    </div>
+                    <span className="w-10 text-right text-sm font-black text-indigo-600 tabular-nums">{(selectedScenario?.prediksi_ips ?? prediksi.prediksi_ips).toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <footer className="text-center py-10 border-t border-gray-100 dark:border-gray-800">
+          <p className="text-xs font-bold text-gray-400 dark:text-gray-600 uppercase tracking-[0.2em]">
+            Data bersifat sintetis untuk keperluan demonstrasi sistem · AcadPredict 2026
+          </p>
+        </footer>
+      </div>
+    </div>
+  )
+}
